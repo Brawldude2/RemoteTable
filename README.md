@@ -80,20 +80,24 @@ Instead use RemoteTable.Insert, RemoteTable.FastRemove, RemoteTable.Remove
 		@param token_alias: String alias of the token
 		@param timeout: Timeout in seconds. Returns nil after timing out
 		@return data: Ready-only replicated table.
+
 	RemoteTable.GetValueChangedSignal
 		- Gets the signal that fires when value of the path changes.
 		@param token_alias: String alias of the token
 		@param path_list: A string array representing the desired path
 		@return Signal: Signal that fires (new, old) data
+
 	RemoteTable.GetChildChangedSignal
 		- Gets the signal that fires when a child is Added / Removed from the table.
 		@param token_alias: String alias of the token
 		@param path_list: A string array representing the desired path_list
 		@return Signal: Signal that fires ("Added" | "Removed", key, value) data
+
 	RemoteTable.DisconnectValueChangedSignal
 		- Stops listening to value changed events for that path.
 		@param token_alias: String alias of the token
 		@param path_list: A string array representing the desired path_list
+		
 	RemoteTable.DisconnectChildChangedSignal
 		- Stops listening to child changed events for that path.
 		@param token_alias: String alias of the token
