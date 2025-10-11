@@ -97,7 +97,7 @@ setmetatable(Connection, {
 })
 
 -- Signal class
-local Signal = {}
+local Signal = {} :: any
 Signal.__index = Signal
 
 function Signal.new()
@@ -181,17 +181,16 @@ setmetatable(Signal, {
 
 type fn<A...> = (A...) -> ()
 
-type Connection<A...> = {
-	Disconnect: (Connection<A...>) -> (),
+export type Connection<A...> = {
+	Disconnect: (self: Connection<A...>) -> (),
 }
-
 export type Signal<A...> = {
-	new: () -> (any),
-	Connect: (Signal<A...>, fn<A...>) -> (Connection<A...>),
-	DisconnectAll: (Signal<A...>) -> (),
-	Fire: (Signal<A...>, A...) -> (),
-	Wait: (Signal<A...>) -> (),
-	Once: (Signal<A...>, fn<A...>) -> (),
+	new: () -> (Signal<A...>),
+	Fire: (self: Signal<A...>, A...) -> (),
+	Wait: (self: Signal<A...>) -> (A...),
+	Once: (self: Signal<A...>, fn<A...>) -> (Connection<A...>),
+	Connect: (self: Signal<A...>, fn<A...>) -> (Connection<A...>),
+	DisconnectAll: (self: Signal<A...>) -> (),
 }
 
 return Signal

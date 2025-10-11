@@ -24,4 +24,11 @@
 - Added .GetProtectedValue which allows users to get the protected value that RemoteTable works with under the hood.
 - Small fix to license. Same GPLv3 applies.
 
+# 1.4 is Here!
+- A bit of code refactor
+- Fixed timeout logic.
+- Fixed an issue where if player left while connection is being established it wouldn't release the player properly for other listeners.
+- Few improvements to race conditions. More consistent .WaitForTable behavior.
+- Fixed .WaitForTable not being able to wait for data again.
+
 ]]

@@ -13,17 +13,17 @@ local Shared = script.Parent.Shared
 local Signal = require(Shared.GoodSignal)
 local Packets = require(Shared.Packets)
 local Config = require(Shared.Config)
+local PromiseLight = require(Shared.PromiseLight)
 
 -- // Globals
 local RemoteTables = {} :: {[number]: any}
 local TableReadySignal = Signal.new()
 
-local ActiveLoadedSignals = {} :: {[string]: Signal.Signal<any>}
+local ActivePromises = {} :: {[string]: PromiseLight.PromiseLight<any>}
 local Tokens = {} :: {[string]: number}
 local AliasLookup = {} :: {[number]: string}
 
 local CachedPaths = {} :: {[number]: {[number]: {Parent: any, Key: string}}}
-
 local PathHashLookup = {} :: {[number]: {[string]: number}}
 
 type ChildOperation = "Added" | "Removed"
@@ -34,6 +34,13 @@ local WaitingChildChangedSignals = {} :: WaitingSignals<ChildOperation, Config.V
 local ActiveChildChangedSignals = {} :: ActiveSignals<ChildOperation, Config.ValidKey, any>
 local WaitingChangedSignals = {} :: WaitingSignals<any, any>
 local ActiveChangedSignals = {} :: ActiveSignals<any, any>
+
+local SignalContainers: {{[number]:{[string | number]: Signal.Signal<...any>}}} = {
+	ActiveChangedSignals,
+	ActiveChildChangedSignals,
+	WaitingChangedSignals,
+	WaitingChildChangedSignals,
+} :: {any}
 
 local GetFullPathString = Config.GetFullPathString
 
@@ -126,10 +133,10 @@ end)
 local function InitializeTables(token)
 	CachedPaths[token] = {}
 	PathHashLookup[token] = {}
-	ActiveChangedSignals[token] =  {}
-	WaitingChangedSignals[token] = {}
-	ActiveChildChangedSignals[token] = {}
-	WaitingChildChangedSignals[token] = {}
+	
+	for _, container in SignalContainers do
+		container[token] = {}
+	end
 end
 
 local function AddToken(token_alias: string, token: number)
@@ -138,23 +145,20 @@ local function AddToken(token_alias: string, token: number)
 end
 
 local function RemoveToken(token_alias: string, token: number)
-	for _,signal in ActiveChildChangedSignals[token] do
-		signal:DisconnectAll()
+	for _, container in SignalContainers do
+		if container[token] then
+			for __, signal in container[token] do
+				signal:DisconnectAll()
+			end
+			container[token] = nil
+		end
 	end
-	for _,signal in ActiveChangedSignals[token] do
-		signal:DisconnectAll()
+	
+	local promise = ActivePromises[token_alias]
+	if promise and not promise.Resolved then
+		promise:Cancel()
 	end
-	for _,signal in WaitingChildChangedSignals[token] do
-		signal:DisconnectAll()
-	end
-	for _,signal in WaitingChangedSignals[token] do
-		signal:DisconnectAll()
-	end
-	ActiveChildChangedSignals[token] = nil
-	ActiveChangedSignals[token] = nil
-	WaitingChildChangedSignals[token] = nil
-	WaitingChangedSignals[token] = nil
-
+	
 	Tokens[token_alias] = nil
 	AliasLookup[token] = nil
 end
@@ -175,8 +179,9 @@ Packets.Set.OnClientEvent:Connect(function(token: number, data: any)
 	RemoteTables[token] = data
 	TableReadySignal:Fire(token_alias)
 	
-	if ActiveLoadedSignals[token_alias] then
-		ActiveLoadedSignals[token_alias]:Fire(data)
+	local promise = ActivePromises[token_alias]
+	if promise then
+		promise:Resolve("Success", data)
 	end
 end)
 
@@ -240,30 +245,23 @@ function Client.WaitForTable(token_alias: string, timeout: number?): any
 		return RemoteTables[Tokens[token_alias]]
 	end
 	
-	local signal = ActiveLoadedSignals[token_alias]
-	if signal then return signal:Wait() end
+	local promise = ActivePromises[token_alias]
+	if promise then return select(2, promise:Await()) end
 	
-	local signal = Signal.new()
-	ActiveLoadedSignals[token_alias] = signal
+	local promise = PromiseLight.new(timeout)
+	ActivePromises[token_alias] = promise
 	
-	local delay_thread: thread
-	local token_register_signal: RBXScriptConnection
-	
-	if timeout then
-		delay_thread = task.delay(timeout, function()
-			warn(`[RemoteTable]: WaitForTable timed out for Token="{token_alias}"`)
-			signal:Fire(nil)
-			ActiveLoadedSignals[token_alias] = nil
-		end)
-		signal:Once(function()
-			if coroutine.status(delay_thread) ~= "normal" then
-				if token_register_signal then
-					token_register_signal:Disconnect()
-				end
-				task.cancel(delay_thread)
-			end
-		end)
+	local token_register_signal: RBXScriptConnection?
+	promise.PreResolve = function()
+		ActivePromises[token_alias] = nil
 	end
+	promise:OnResolve(function(status: "Cancel" | "Success" | "Timeout", data)
+		if token_register_signal and token_register_signal.Connected then
+			token_register_signal:Disconnect()
+			token_register_signal = nil
+		end
+		promise:Destroy()
+	end)
 	
 	local sanitized_alias = Config.SanitizeForAttributeName(token_alias)
 	if not script.Parent:GetAttribute(sanitized_alias) then
@@ -274,7 +272,7 @@ function Client.WaitForTable(token_alias: string, timeout: number?): any
 		Packets.Request:Fire(token_alias)
 	end
 	
-	return signal:Wait()
+	return select(2, promise:Await())
 end
 
 --[[
