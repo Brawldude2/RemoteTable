@@ -30,5 +30,6 @@
 - Fixed an issue where if player left while connection is being established it wouldn't release the player properly for other listeners.
 - Few improvements to race conditions. More consistent .WaitForTable behavior.
 - Fixed .WaitForTable not being able to wait for data again.
+- Changed license to LGPLv3.
 
 ]]
